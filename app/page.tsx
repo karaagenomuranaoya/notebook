@@ -46,7 +46,7 @@ export default function Home() {
       // 現在の表示文字数 + 1文字分を切り出してセット
       const nextCharIndex = displayText.length + 1;
       setDisplayText(inputText.slice(0, nextCharIndex));
-    }, 100); // 100ms = 0.1秒
+    }, 300); // 100ms = 0.1秒
 
     return () => clearTimeout(timer);
   }, [inputText, displayText, isAnimating]);
@@ -62,26 +62,37 @@ export default function Home() {
     // ※ displayTextは上のuseEffectが検知して後から追いかけてきます
   };
 
-  // ▼▼▼ ノート表示用テキスト生成ロジック ▼▼▼
-  // 引数を inputText ではなく displayText に適用することで、遅延表示を実現
+  // ▼▼▼ ノート表示用テキスト生成ロジック（ページ送り版） ▼▼▼
   const getVisualText = (fullText: string) => {
     if (!fullText) return "";
 
+    // 1. まず全てのテキストを表示用の行（16文字区切り）に分解する
     const lines = fullText.split("\n");
-    let visualLines: string[] = [];
+    let allVisualLines: string[] = [];
 
     lines.forEach((line) => {
       if (line === "") {
-        visualLines.push(""); 
+        allVisualLines.push(""); 
       } else {
         for (let i = 0; i < line.length; i += CHARS_PER_LINE) {
-          visualLines.push(line.substring(i, i + CHARS_PER_LINE));
+          allVisualLines.push(line.substring(i, i + CHARS_PER_LINE));
         }
       }
     });
 
-    const slicedLines = visualLines.slice(-MAX_LINES_PER_PAGE);
-    return slicedLines.join("\n");
+    // 2. 現在何ページ目にいるか計算する (0始まり)
+    // 行数が0の場合は0ページ目
+    // 例: 17行目までは pageIndex = 0, 18行目(index 17)からは pageIndex = 1
+    const totalLines = allVisualLines.length;
+    const pageIndex = totalLines === 0 ? 0 : Math.floor((totalLines - 1) / MAX_LINES_PER_PAGE);
+
+    // 3. そのページに表示すべき範囲を切り出す
+    const startIndex = pageIndex * MAX_LINES_PER_PAGE;
+    const endIndex = startIndex + MAX_LINES_PER_PAGE;
+    
+    const pageLines = allVisualLines.slice(startIndex, endIndex);
+
+    return pageLines.join("\n");
   };
 
   const visualDisplayText = getVisualText(displayText);
@@ -127,10 +138,6 @@ export default function Home() {
             }}
           >
             {visualDisplayText}
-            {/* キャレット（カーソル）演出：文字が追いついていない時だけ表示しても面白いかも */}
-            {displayText !== inputText && isAnimating && (
-              <span className="animate-pulse inline-block w-2 h-4 bg-purple-400/50 ml-1 align-middle"></span>
-            )}
           </p>
         </div>
 
