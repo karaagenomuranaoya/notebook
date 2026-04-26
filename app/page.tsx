@@ -9,20 +9,48 @@ const CHARS_PER_LINE = 16;
 
 export default function Home() {
   const [text, setText] = useState("");
+  // 追加: 実際にノートに表示されている文字数を管理するState
+  const [visibleCount, setVisibleCount] = useState(0);
   const [isAnimating, setIsAnimating] = useState(true);
 
   // ▼▼▼ 初期ロード（ローカルストレージ） ▼▼▼
   useEffect(() => {
     const savedText = localStorage.getItem("notebook_main_text");
-    if (savedText) setText(savedText);
+    if (savedText) {
+      setText(savedText);
+      // 初期ロード時は、保存されていたテキストを即座に全て表示させる
+      setVisibleCount(savedText.length);
+    }
   }, []);
 
   // ▼▼▼ 制限なし入力ハンドラー ▼▼▼
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = e.target.value;
+    
+    // テキストが削除されて短くなった場合、表示文字数もそれに合わせる
+    if (newText.length < visibleCount) {
+      setVisibleCount(newText.length);
+    }
+    
     setText(newText);
     localStorage.setItem("notebook_main_text", newText);
   };
+
+  // ▼▼▼ 自動タイピングアニメーションのロジック ▼▼▼
+  useEffect(() => {
+    // アニメーションが停止中の場合はタイマーを動かさない
+    if (!isAnimating) return;
+
+    // 表示文字数が入力テキスト全体より少ない場合、0.5秒(500ms)後に1文字追加する
+    // 500msに1文字 = 1秒に2文字
+    if (visibleCount < text.length) {
+      const timer = setTimeout(() => {
+        setVisibleCount((prev) => prev + 1);
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [text, visibleCount, isAnimating]);
 
   // ▼▼▼ ノート表示用テキスト生成ロジック ▼▼▼
   const getDisplayText = (fullText: string) => {
@@ -45,14 +73,16 @@ export default function Home() {
     return slicedLines.join("\n");
   };
 
-  const displayText = getDisplayText(text);
+  // 全テキストではなく、現在表示すべき文字数(visibleCount)までを切り取って渡す
+  const displayText = getDisplayText(text.slice(0, visibleCount));
+
+  // 「現在文字を書き進めている最中かどうか」を判定
+  const isCurrentlyWriting = isAnimating && visibleCount < text.length;
 
   return (
-    // ▼▼▼ 変更点: bg-[#FFD1DC] を追加し、文字色を黒系(text-gray-800)に変更 ▼▼▼
     <main className="min-h-screen flex flex-row items-center justify-center p-4 gap-4 overflow-hidden text-gray-800 bg-[#FFD1DC]">
       
-      {/* 
-        === 左側：ノートブック表示エリア ===
+      {/* === 左側：ノートブック表示エリア ===
       */}
       <div 
         className="relative w-[70%] max-w-6xl aspect-square md:aspect-[4/3] perspective-container overflow-hidden rounded-2xl flex-shrink-0"
@@ -82,7 +112,7 @@ export default function Home() {
           }}
         >
           <p 
-            className="w-full h-full text-base md:text-s text-[#6d667e] whitespace-pre font-hand leading-[1.6] tracking-widest"
+            className="w-full h-full text-base md:text-sm text-[#6d667e] whitespace-pre font-hand leading-[1.6] tracking-widest"
             style={{
               textShadow: "1px 1px 1px rgba(0,0,0,0.05), 0 0 5px rgba(109, 102, 126, 0.1)",
               opacity: 0.9
@@ -152,7 +182,8 @@ export default function Home() {
               50% { transform: translate(-200px, 100px) rotateZ(-30deg); }
             }
           `}</style>
-          <div style={{ animation: "writing-step 1.33s steps(1) infinite", animationPlayState: isAnimating ? "running" : "paused"}}>
+          {/* 変更: 実際に書いている最中のみ腕が動くように調整 */}
+          <div style={{ animation: "writing-step 1.33s steps(1) infinite", animationPlayState: isCurrentlyWriting ? "running" : "paused"}}>
             <Image 
               src="/hand.png" 
               alt="Hand Writing" 
@@ -164,19 +195,18 @@ export default function Home() {
         </div>
       </div>
 
-      {/* 
-        === 右側：入力エリア === 
+      {/* === 右側：入力エリア === 
       */}
       <div className="flex-1 max-w-sm h-[90vh] z-20 flex flex-col gap-3 animate-in slide-in-from-right-10 fade-in duration-700">
         
-        {/* コントロールヘッダー (背景色に合わせて見やすく調整) */}
+        {/* コントロールヘッダー */}
         <div className="flex flex-col gap-2 px-3 py-3 bg-white/40 rounded-xl border border-white/40 shadow-lg">
           <div className="flex items-center justify-between">
             <label htmlFor="diary-input" className="text-sm text-gray-700 font-bold tracking-widest">
               SCRIPT
             </label>
             <div className="text-[10px] text-gray-600 font-mono">
-              {text.length} chars
+              {visibleCount} / {text.length} chars
             </div>
           </div>
           
@@ -190,14 +220,14 @@ export default function Home() {
                 : "bg-gray-200 text-gray-500"}
             `}
           >
-            <span className={isAnimating ? "animate-pulse" : ""}>
-              {isAnimating ? "● WRITING" : "II PAUSED"}
+            {/* 書き進めている状態かどうかで表示テキストを分岐 */}
+            <span className={isCurrentlyWriting ? "animate-pulse" : ""}>
+              {!isAnimating ? "II PAUSED" : isCurrentlyWriting ? "● WRITING" : "✓ FINISHED"}
             </span>
           </button>
         </div>
         
         <div className="relative flex-1">
-          {/* テキストエリアも背景色に合わせて白っぽく変更 */}
           <textarea
             id="diary-input"
             value={text}
